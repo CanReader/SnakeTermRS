@@ -1,0 +1,15 @@
+[package]
+name = "snake-term"
+version = "1.0.0"
+edition = "2021"
+description = "A compact, configurable, terminal-based Snake game written in Rust"
+
+[dependencies]
+crossterm = "0.28"
+clap = { version = "4", features = ["derive"] }
+rand = "0.8"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
