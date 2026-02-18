@@ -5,6 +5,7 @@ use crate::config::{Direction, Settings};
 
 pub enum GameInput {
     Move(Direction),
+    Pause,
     Quit,
     None,
 }
@@ -18,47 +19,35 @@ pub fn poll_input(settings: &Settings, timeout: Duration) -> GameInput {
         Ok(Event::Key(KeyEvent {
             code, modifiers, ..
         })) => {
-            // Ctrl+C to quit
             if modifiers.contains(KeyModifiers::CONTROL) && code == KeyCode::Char('c') {
                 return GameInput::Quit;
             }
 
-            let dir = match code {
+            match code {
+                KeyCode::Char('p') | KeyCode::Char('P') | KeyCode::Char(' ') => {
+                    return GameInput::Pause;
+                }
                 KeyCode::Char('w') | KeyCode::Char('W') | KeyCode::Up => {
-                    if settings.invert_controls {
-                        Direction::South
-                    } else {
-                        Direction::North
-                    }
+                    let dir = if settings.invert_controls { Direction::South } else { Direction::North };
+                    return GameInput::Move(dir);
                 }
                 KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Down => {
-                    if settings.invert_controls {
-                        Direction::North
-                    } else {
-                        Direction::South
-                    }
+                    let dir = if settings.invert_controls { Direction::North } else { Direction::South };
+                    return GameInput::Move(dir);
                 }
                 KeyCode::Char('a') | KeyCode::Char('A') | KeyCode::Left => {
-                    if settings.invert_controls {
-                        Direction::East
-                    } else {
-                        Direction::West
-                    }
+                    let dir = if settings.invert_controls { Direction::East } else { Direction::West };
+                    return GameInput::Move(dir);
                 }
                 KeyCode::Char('d') | KeyCode::Char('D') | KeyCode::Right => {
-                    if settings.invert_controls {
-                        Direction::West
-                    } else {
-                        Direction::East
-                    }
+                    let dir = if settings.invert_controls { Direction::West } else { Direction::East };
+                    return GameInput::Move(dir);
                 }
                 KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
                     return GameInput::Quit;
                 }
                 _ => return GameInput::None,
-            };
-
-            GameInput::Move(dir)
+            }
         }
         _ => GameInput::None,
     }

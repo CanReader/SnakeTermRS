@@ -9,6 +9,7 @@ use std::time::Duration;
 use clap::Parser;
 use crossterm::{
     cursor,
+    style::{Color, Stylize},
     terminal::{self, ClearType},
     ExecutableCommand,
 };
@@ -20,10 +21,14 @@ use game_map::GameMap;
 use input::{poll_game_over_input, poll_input, GameInput, GameOverInput};
 use snake::Snake;
 
+fn bell(stdout: &mut io::Stdout) {
+    let _ = write!(stdout, "\x07");
+    let _ = stdout.flush();
+}
+
 fn main() {
     let settings = Settings::parse().resolve();
 
-    // Set up terminal
     let mut stdout = io::stdout();
     terminal::enable_raw_mode().expect("Failed to enable raw mode");
     stdout
@@ -35,7 +40,6 @@ fn main() {
 
     let result = run_game(&settings, &mut stdout);
 
-    // Restore terminal
     let _ = stdout.execute(cursor::Show);
     let _ = stdout.execute(terminal::LeaveAlternateScreen);
     let _ = terminal::disable_raw_mode();
@@ -59,41 +63,59 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
 
     game_map.place_food(&mut snake, &mut rng);
 
+    let mut paused = false;
+
     loop {
-        // Main game loop
         while !snake.is_dead {
-            // Process input (non-blocking with short timeout)
-            match poll_input(settings, Duration::from_millis(1)) {
-                GameInput::Move(dir) => snake.set_next_direction(dir),
+            let input = poll_input(settings, Duration::from_millis(1));
+            match &input {
+                GameInput::Move(dir) => snake.queue_direction(*dir),
+                GameInput::Pause => {
+                    paused = !paused;
+                    let _ = poll_input(settings, Duration::from_millis(1));
+                }
                 GameInput::Quit => return Ok(()),
                 GameInput::None => {}
             }
 
-            snake.validate_direction();
+            if paused {
+                stdout.execute(cursor::MoveTo(0, 0))?;
+                stdout.execute(terminal::Clear(ClearType::All))?;
+                let frame = game_map.render(&snake, settings);
+                write!(stdout, "{frame}")?;
+                write!(stdout, "  {}\r\n",
+                    "** PAUSED — press P or Space to resume **".with(Color::Yellow))?;
+                stdout.flush()?;
+                std::thread::sleep(Duration::from_millis(50));
+                continue;
+            }
+
+            snake.apply_queued_input();
             snake.update_movement(settings);
 
             if snake.is_dead {
+                bell(stdout);
                 break;
             }
 
             if snake.food_eaten {
+                bell(stdout);
                 game_map.place_food(&mut snake, &mut rng);
             }
 
-            // Render
             stdout.execute(cursor::MoveTo(0, 0))?;
             stdout.execute(terminal::Clear(ClearType::All))?;
             let frame = game_map.render(&snake, settings);
             write!(stdout, "{frame}")?;
             stdout.flush()?;
 
-            // Frame delay (also polls input during the wait)
             let mut remaining = frame_duration;
             let poll_interval = Duration::from_millis(10);
             while remaining > Duration::ZERO {
                 let wait = remaining.min(poll_interval);
                 match poll_input(settings, wait) {
-                    GameInput::Move(dir) => snake.set_next_direction(dir),
+                    GameInput::Move(dir) => snake.queue_direction(dir),
+                    GameInput::Pause => paused = !paused,
                     GameInput::Quit => return Ok(()),
                     GameInput::None => {}
                 }
@@ -108,7 +130,7 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
         write!(stdout, "{frame}")?;
 
         if settings.auto_restart {
-            write!(stdout, "\r\n  GAME OVER! Restarting...\r\n")?;
+            write!(stdout, "\r\n  {}\r\n", "GAME OVER! Restarting...".with(Color::Red))?;
             stdout.flush()?;
             std::thread::sleep(Duration::from_secs(1));
             snake.reset();
@@ -116,11 +138,13 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
             continue;
         }
 
-        write!(stdout, "\r\n  GAME OVER!  Score: {}\r\n", snake.length)?;
-        write!(stdout, "  Press 'r' to restart or 'q' to quit\r\n")?;
+        write!(stdout, "\r\n  {}  Score: {}\r\n",
+            "GAME OVER!".with(Color::Red),
+            snake.length.to_string().with(Color::Yellow))?;
+        write!(stdout, "  {}\r\n",
+            "Press 'r' to restart or 'q' to quit".with(Color::DarkGrey))?;
         stdout.flush()?;
 
-        // Wait for restart or quit
         loop {
             match poll_game_over_input() {
                 GameOverInput::Restart => {

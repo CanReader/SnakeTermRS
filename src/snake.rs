@@ -10,7 +10,7 @@ pub struct Snake {
     pub is_dead: bool,
     pub length: usize,
     pub direction: Direction,
-    next_direction: Option<Direction>,
+    pub input_queue: VecDeque<Direction>,
     world: [[u8; MAP_WIDTH]; MAP_HEIGHT],
 }
 
@@ -24,7 +24,7 @@ impl Snake {
             is_dead: false,
             length: INITIAL_SNAKE_LENGTH,
             direction: Direction::East,
-            next_direction: None,
+            input_queue: VecDeque::new(),
             world: [[0; MAP_WIDTH]; MAP_HEIGHT],
         };
         snake.initialize();
@@ -33,7 +33,7 @@ impl Snake {
 
     pub fn reset(&mut self) {
         self.direction = Direction::East;
-        self.next_direction = None;
+        self.input_queue.clear();
         self.food_eaten = false;
         self.is_dead = false;
         self.length = INITIAL_SNAKE_LENGTH;
@@ -53,12 +53,17 @@ impl Snake {
         self.head = *self.parts.back().unwrap();
     }
 
-    pub fn set_next_direction(&mut self, dir: Direction) {
-        self.next_direction = Some(dir);
+    pub fn queue_direction(&mut self, dir: Direction) {
+        if self.input_queue.len() < 3 {
+            let last = self.input_queue.back().copied().unwrap_or(self.direction);
+            if dir != last.opposite() && dir != last {
+                self.input_queue.push_back(dir);
+            }
+        }
     }
 
-    pub fn validate_direction(&mut self) {
-        if let Some(next) = self.next_direction.take() {
+    pub fn apply_queued_input(&mut self) {
+        if let Some(next) = self.input_queue.pop_front() {
             if next != self.direction.opposite() {
                 self.direction = next;
             }
