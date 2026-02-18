@@ -210,6 +210,16 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
             }
         }
 
+        // Death animation
+        for i in 0..6 {
+            stdout.execute(cursor::MoveTo(0, 0))?;
+            stdout.execute(terminal::Clear(ClearType::All))?;
+            let frame = game_map.render_death_animation(&snake, settings, i);
+            write!(stdout, "{frame}")?;
+            stdout.flush()?;
+            std::thread::sleep(Duration::from_millis(150));
+        }
+
         // High score
         let (high, is_new) = update_high_score(snake.score);
 

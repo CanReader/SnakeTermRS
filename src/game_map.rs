@@ -159,4 +159,52 @@ impl GameMap {
 
         buf
     }
+
+    pub fn render_death_animation(&mut self, snake: &Snake, settings: &Settings, frame: usize) -> String {
+        for row in self.grid.iter_mut() {
+            row.fill(Cell::empty());
+        }
+        for &(r, c) in &self.walls {
+            self.grid[r][c] = Cell::wall();
+        }
+
+        let flash_color = if frame % 2 == 0 { Color::Red } else { Color::DarkRed };
+
+        for &(r, c) in &snake.parts {
+            if r < self.height && c < self.width {
+                self.grid[r][c] = Cell { ch: settings.body, color: flash_color };
+            }
+        }
+        if snake.head.0 < self.height && snake.head.1 < self.width {
+            self.grid[snake.head.0][snake.head.1] = Cell { ch: 'X', color: flash_color };
+        }
+
+        self.grid[snake.food.0][snake.food.1] = Cell { ch: settings.food, color: Color::Red };
+
+        let map_display_width = self.width * 2;
+        let mut buf = String::with_capacity((self.height + 4) * (self.width * 2 + 20));
+
+        if !settings.hide_score {
+            let score = format!("Score: {}", snake.score);
+            let padding = if score.len() < map_display_width {
+                (map_display_width - score.len()) / 2
+            } else {
+                0
+            };
+            buf.push_str(&" ".repeat(padding));
+            let styled: StyledContent<&str> = score.as_str().with(Color::White);
+            buf.push_str(&format!("{styled}"));
+            buf.push_str("\r\n");
+        }
+
+        for row in &self.grid {
+            for cell in row.iter() {
+                let styled: StyledContent<String> = cell.ch.to_string().with(cell.color);
+                buf.push_str(&format!("{styled} "));
+            }
+            buf.push_str("\r\n");
+        }
+
+        buf
+    }
 }
