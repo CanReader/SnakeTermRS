@@ -161,20 +161,10 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
 
     let mut snake1 = Snake::new(w, h);
     let mut snake2 = if settings.multiplayer {
+        // Place P1 on upper third, P2 on lower third so they don't collide
+        snake1.init_at(h / 3, w / 2 - config::INITIAL_SNAKE_LENGTH / 2, config::Direction::East, false);
         let mut s = Snake::new(w, h);
-        // Place player 2 on the opposite side
-        s.parts.clear();
-        s.direction = config::Direction::West;
-        let row = h / 2;
-        let start_col = w / 2 + 2;
-        for i in 0..config::INITIAL_SNAKE_LENGTH {
-            let pos = (row, start_col - i);
-            s.parts.push_back(pos);
-        }
-        s.head = *s.parts.back().unwrap();
-        s.length = config::INITIAL_SNAKE_LENGTH;
-        // Reset world for p2
-        s.score = 0;
+        s.init_at(2 * h / 3, w / 2 + config::INITIAL_SNAKE_LENGTH / 2, config::Direction::West, true);
         Some(s)
     } else {
         None
@@ -392,13 +382,15 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
             stdout.flush()?;
             std::thread::sleep(Duration::from_secs(1));
             snake1.reset();
+            if let Some(ref mut s2) = snake2 {
+                snake1.init_at(h / 3, w / 2 - config::INITIAL_SNAKE_LENGTH / 2, config::Direction::East, false);
+                s2.reset();
+                s2.init_at(2 * h / 3, w / 2 + config::INITIAL_SNAKE_LENGTH / 2, config::Direction::West, true);
+            }
             game_map.place_food(&mut snake1, &mut rng);
             game_map.border_min = (0, 0);
             game_map.border_max = (h, w);
             game_map.shrink_timer = 0;
-            if let Some(ref mut s2) = snake2 {
-                s2.reset();
-            }
             frame_count = 0;
             recorder = settings.record.as_ref().map(|_| Recorder::new());
             continue;
@@ -439,14 +431,16 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
             match poll_game_over_input() {
                 GameOverInput::Restart => {
                     snake1.reset();
+                    if let Some(ref mut s2) = snake2 {
+                        snake1.init_at(h / 3, w / 2 - config::INITIAL_SNAKE_LENGTH / 2, config::Direction::East, false);
+                        s2.reset();
+                        s2.init_at(2 * h / 3, w / 2 + config::INITIAL_SNAKE_LENGTH / 2, config::Direction::West, true);
+                    }
                     game_map.place_food(&mut snake1, &mut rng);
                     game_map.border_min = (0, 0);
                     game_map.border_max = (h, w);
                     game_map.shrink_timer = 0;
                     game_map.bonus_food = None;
-                    if let Some(ref mut s2) = snake2 {
-                        s2.reset();
-                    }
                     frame_count = 0;
                     recorder = settings.record.as_ref().map(|_| Recorder::new());
                     break;

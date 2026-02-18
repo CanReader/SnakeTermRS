@@ -62,6 +62,24 @@ impl Snake {
         self.head = *self.parts.back().unwrap();
     }
 
+    pub fn init_at(&mut self, row: usize, start_col: usize, dir: Direction, reverse: bool) {
+        self.parts.clear();
+        for r in self.world.iter_mut() { r.fill(0); }
+        self.direction = dir;
+        self.score = 0;
+        self.length = INITIAL_SNAKE_LENGTH;
+        for i in 0..INITIAL_SNAKE_LENGTH {
+            let pos = if reverse {
+                (row, start_col - i)
+            } else {
+                (row, start_col + i)
+            };
+            self.parts.push_back(pos);
+            self.world[pos.0][pos.1] = 1;
+        }
+        self.head = *self.parts.back().unwrap();
+    }
+
     pub fn queue_direction(&mut self, dir: Direction) {
         // Buffer up to 3 inputs for smooth turning
         if self.input_queue.len() < 3 {
