@@ -1,8 +1,9 @@
 use clap::Parser;
 
-pub const MAP_WIDTH: usize = 20;
-pub const MAP_HEIGHT: usize = 20;
+pub const DEFAULT_MAP_WIDTH: usize = 20;
+pub const DEFAULT_MAP_HEIGHT: usize = 20;
 pub const MAP_CHAR: char = '.';
+pub const WALL_CHAR: char = '#';
 pub const INITIAL_SNAKE_LENGTH: usize = 3;
 
 #[derive(Parser, Debug, Clone)]
@@ -59,6 +60,18 @@ pub struct Settings {
     /// Enable wrap-around (pass from edge to opposite)
     #[arg(long)]
     pub disable_borders: bool,
+
+    /// Number of random obstacles on the map
+    #[arg(long, default_value_t = 0)]
+    pub obstacles: usize,
+
+    /// Map width (0 = auto-detect from terminal)
+    #[arg(long, default_value_t = 0)]
+    pub map_width: usize,
+
+    /// Map height (0 = auto-detect from terminal)
+    #[arg(long, default_value_t = 0)]
+    pub map_height: usize,
 }
 
 impl Settings {
@@ -72,6 +85,25 @@ impl Settings {
                 self.head_s = chars[3];
             }
         }
+
+        if self.map_width == 0 || self.map_height == 0 {
+            if let Ok((cols, rows)) = crossterm::terminal::size() {
+                if self.map_width == 0 {
+                    self.map_width = ((cols as usize).saturating_sub(4) / 2)
+                        .min(40)
+                        .max(10);
+                }
+                if self.map_height == 0 {
+                    self.map_height = ((rows as usize).saturating_sub(6))
+                        .min(30)
+                        .max(10);
+                }
+            } else {
+                if self.map_width == 0 { self.map_width = DEFAULT_MAP_WIDTH; }
+                if self.map_height == 0 { self.map_height = DEFAULT_MAP_HEIGHT; }
+            }
+        }
+
         self
     }
 

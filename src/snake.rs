@@ -11,11 +11,13 @@ pub struct Snake {
     pub length: usize,
     pub direction: Direction,
     pub input_queue: VecDeque<Direction>,
-    world: [[u8; MAP_WIDTH]; MAP_HEIGHT],
+    world: Vec<Vec<u8>>,
+    pub map_width: usize,
+    pub map_height: usize,
 }
 
 impl Snake {
-    pub fn new() -> Self {
+    pub fn new(map_width: usize, map_height: usize) -> Self {
         let mut snake = Snake {
             parts: VecDeque::new(),
             head: (0, 0),
@@ -25,7 +27,9 @@ impl Snake {
             length: INITIAL_SNAKE_LENGTH,
             direction: Direction::East,
             input_queue: VecDeque::new(),
-            world: [[0; MAP_WIDTH]; MAP_HEIGHT],
+            world: vec![vec![0u8; map_width]; map_height],
+            map_width,
+            map_height,
         };
         snake.initialize();
         snake
@@ -38,13 +42,15 @@ impl Snake {
         self.is_dead = false;
         self.length = INITIAL_SNAKE_LENGTH;
         self.parts.clear();
-        self.world = [[0; MAP_WIDTH]; MAP_HEIGHT];
+        for row in self.world.iter_mut() {
+            row.fill(0);
+        }
         self.initialize();
     }
 
     fn initialize(&mut self) {
-        let row = MAP_HEIGHT / 2;
-        let start_col = MAP_WIDTH / 2 - INITIAL_SNAKE_LENGTH / 2;
+        let row = self.map_height / 2;
+        let start_col = self.map_width / 2 - INITIAL_SNAKE_LENGTH / 2;
         for i in 0..INITIAL_SNAKE_LENGTH {
             let pos = (row, start_col + i);
             self.parts.push_back(pos);
@@ -70,27 +76,31 @@ impl Snake {
         }
     }
 
-    pub fn update_movement(&mut self, settings: &Settings) {
+    pub fn update_movement(&mut self, settings: &Settings, walls: &[(usize, usize)]) {
         let (dr, dc) = self.direction.delta();
         let new_row = self.head.0 as i32 + dr;
         let new_col = self.head.1 as i32 + dc;
 
+        let h = self.map_height;
+        let w = self.map_width;
+
         let (new_row, new_col) = if settings.disable_borders {
             (
-                ((new_row % MAP_HEIGHT as i32) + MAP_HEIGHT as i32) as usize % MAP_HEIGHT,
-                ((new_col % MAP_WIDTH as i32) + MAP_WIDTH as i32) as usize % MAP_WIDTH,
+                ((new_row % h as i32 + h as i32) as usize) % h,
+                ((new_col % w as i32 + w as i32) as usize) % w,
             )
         } else {
-            if new_row < 0
-                || new_row >= MAP_HEIGHT as i32
-                || new_col < 0
-                || new_col >= MAP_WIDTH as i32
-            {
+            if new_row < 0 || new_row >= h as i32 || new_col < 0 || new_col >= w as i32 {
                 self.is_dead = true;
                 return;
             }
             (new_row as usize, new_col as usize)
         };
+
+        if walls.contains(&(new_row, new_col)) {
+            self.is_dead = true;
+            return;
+        }
 
         self.head = (new_row, new_col);
         self.parts.push_back(self.head);
@@ -100,7 +110,7 @@ impl Snake {
             self.length += 1;
         } else {
             if let Some(tail) = self.parts.pop_front() {
-                self.world[tail.0][tail.1] -= 1;
+                self.world[tail.0][tail.1] = self.world[tail.0][tail.1].saturating_sub(1);
             }
         }
 

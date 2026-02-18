@@ -51,8 +51,10 @@ fn main() {
 }
 
 fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
-    let mut snake = Snake::new();
-    let mut game_map = GameMap::new();
+    let w = settings.map_width;
+    let h = settings.map_height;
+    let mut snake = Snake::new(w, h);
+    let mut game_map = GameMap::new(w, h);
     let frame_duration = Duration::from_millis(settings.speed);
 
     let mut rng: StdRng = if settings.seed != 0 {
@@ -62,6 +64,9 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
     };
 
     game_map.place_food(&mut snake, &mut rng);
+    if settings.obstacles > 0 {
+        game_map.place_walls(settings.obstacles, &snake, &mut rng);
+    }
 
     let mut paused = false;
 
@@ -91,7 +96,8 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
             }
 
             snake.apply_queued_input();
-            snake.update_movement(settings);
+            let walls = game_map.walls.clone();
+            snake.update_movement(settings, &walls);
 
             if snake.is_dead {
                 bell(stdout);
