@@ -1,5 +1,6 @@
 mod config;
 mod game_map;
+mod highscore;
 mod input;
 mod snake;
 
@@ -18,7 +19,8 @@ use rand::SeedableRng;
 
 use config::Settings;
 use game_map::GameMap;
-use input::{poll_game_over_input, poll_input, GameInput, GameOverInput};
+use highscore::update_high_score;
+use input::*;
 use snake::Snake;
 
 fn bell(stdout: &mut io::Stdout) {
@@ -38,7 +40,7 @@ fn main() {
         .execute(cursor::Hide)
         .expect("Failed to hide cursor");
 
-    let result = run_game(&settings, &mut stdout);
+    let result = show_menu_and_play(&settings, &mut stdout);
 
     let _ = stdout.execute(cursor::Show);
     let _ = stdout.execute(terminal::LeaveAlternateScreen);
@@ -47,6 +49,75 @@ fn main() {
     if let Err(e) = result {
         eprintln!("Error: {e}");
         std::process::exit(1);
+    }
+}
+
+enum MenuChoice {
+    Play,
+    Quit,
+}
+
+fn show_menu_and_play(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
+    loop {
+        match show_start_menu(settings, stdout)? {
+            MenuChoice::Play => run_game(settings, stdout)?,
+            MenuChoice::Quit => return Ok(()),
+        }
+    }
+}
+
+fn show_start_menu(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<MenuChoice> {
+    let items = ["Start Game", "Quit"];
+    let mut selected = 0usize;
+    let high = highscore::load_high_score();
+
+    loop {
+        stdout.execute(cursor::MoveTo(0, 0))?;
+        stdout.execute(terminal::Clear(ClearType::All))?;
+
+        let mut buf = String::new();
+        buf.push_str("\r\n");
+        buf.push_str(&format!("{}", "  ╔═══════════════════════════════╗\r\n".with(Color::Green)));
+        buf.push_str(&format!("{}", "  ║     SNAKE — Terminal Edition  ║\r\n".with(Color::Green)));
+        buf.push_str(&format!("{}", "  ╚═══════════════════════════════╝\r\n".with(Color::Green)));
+        buf.push_str("\r\n");
+
+        if high > 0 {
+            buf.push_str(&format!("  {}  {}\r\n\r\n",
+                "High Score:".with(Color::DarkYellow),
+                high.to_string().with(Color::Yellow)));
+        }
+
+        buf.push_str(&format!("  Map: {}x{}\r\n\r\n",
+            settings.map_width.to_string().with(Color::Cyan),
+            settings.map_height.to_string().with(Color::Cyan)));
+
+        for (i, item) in items.iter().enumerate() {
+            if i == selected {
+                buf.push_str(&format!("  {} {}\r\n", ">".with(Color::Yellow), item.with(Color::Yellow)));
+            } else {
+                buf.push_str(&format!("    {}\r\n", item.with(Color::White)));
+            }
+        }
+
+        buf.push_str(&format!("\r\n  {}\r\n",
+            "Use W/S or arrows to select, Enter to confirm".with(Color::DarkGrey)));
+
+        write!(stdout, "{buf}")?;
+        stdout.flush()?;
+
+        match poll_menu_input(Duration::from_millis(100)) {
+            MenuInput::Up => { if selected > 0 { selected -= 1; } }
+            MenuInput::Down => { if selected < items.len() - 1 { selected += 1; } }
+            MenuInput::Enter => {
+                return Ok(match selected {
+                    0 => MenuChoice::Play,
+                    _ => MenuChoice::Quit,
+                });
+            }
+            MenuInput::Quit => return Ok(MenuChoice::Quit),
+            MenuInput::None => {}
+        }
     }
 }
 
@@ -139,6 +210,9 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
             }
         }
 
+        // High score
+        let (high, is_new) = update_high_score(snake.score);
+
         // Game over
         stdout.execute(cursor::MoveTo(0, 0))?;
         stdout.execute(terminal::Clear(ClearType::All))?;
@@ -159,8 +233,11 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
         write!(stdout, "\r\n  {}  Score: {}\r\n",
             "GAME OVER!".with(Color::Red),
             snake.score.to_string().with(Color::Yellow))?;
+        write!(stdout, "  High Score: {}{}\r\n",
+            high.to_string().with(Color::Yellow),
+            if is_new { " (NEW!)" } else { "" })?;
         write!(stdout, "  {}\r\n",
-            "Press 'r' to restart or 'q' to quit".with(Color::DarkGrey))?;
+            "Press 'r' to restart, 'm' for menu, or 'q' to quit".with(Color::DarkGrey))?;
         stdout.flush()?;
 
         loop {
@@ -172,6 +249,7 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
                     frame_count = 0;
                     break;
                 }
+                GameOverInput::Menu => return Ok(()),
                 GameOverInput::Quit => return Ok(()),
                 GameOverInput::None => {}
             }

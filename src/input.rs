@@ -53,9 +53,42 @@ pub fn poll_input(settings: &Settings, timeout: Duration) -> GameInput {
     }
 }
 
+pub enum MenuInput {
+    Enter,
+    Up,
+    Down,
+    Quit,
+    None,
+}
+
+pub fn poll_menu_input(timeout: Duration) -> MenuInput {
+    if !event::poll(timeout).unwrap_or(false) {
+        return MenuInput::None;
+    }
+
+    match event::read() {
+        Ok(Event::Key(KeyEvent {
+            code, modifiers, ..
+        })) => {
+            if modifiers.contains(KeyModifiers::CONTROL) && code == KeyCode::Char('c') {
+                return MenuInput::Quit;
+            }
+            match code {
+                KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('W') => MenuInput::Up,
+                KeyCode::Down | KeyCode::Char('s') | KeyCode::Char('S') => MenuInput::Down,
+                KeyCode::Enter | KeyCode::Char(' ') => MenuInput::Enter,
+                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => MenuInput::Quit,
+                _ => MenuInput::None,
+            }
+        }
+        _ => MenuInput::None,
+    }
+}
+
 pub enum GameOverInput {
     Restart,
     Quit,
+    Menu,
     None,
 }
 
@@ -74,6 +107,7 @@ pub fn poll_game_over_input() -> GameOverInput {
             match code {
                 KeyCode::Char('r') | KeyCode::Char('R') => GameOverInput::Restart,
                 KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => GameOverInput::Quit,
+                KeyCode::Char('m') | KeyCode::Char('M') => GameOverInput::Menu,
                 _ => GameOverInput::None,
             }
         }
