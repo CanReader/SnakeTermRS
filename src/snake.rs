@@ -14,6 +14,7 @@ pub struct Snake {
     world: Vec<Vec<u8>>,
     pub map_width: usize,
     pub map_height: usize,
+    pub score: usize,
 }
 
 impl Snake {
@@ -30,6 +31,7 @@ impl Snake {
             world: vec![vec![0u8; map_width]; map_height],
             map_width,
             map_height,
+            score: 0,
         };
         snake.initialize();
         snake
@@ -39,6 +41,7 @@ impl Snake {
         self.direction = Direction::East;
         self.input_queue.clear();
         self.food_eaten = false;
+        self.score = 0;
         self.is_dead = false;
         self.length = INITIAL_SNAKE_LENGTH;
         self.parts.clear();
@@ -108,6 +111,7 @@ impl Snake {
         self.food_eaten = self.head == self.food;
         if self.food_eaten {
             self.length += 1;
+            self.score += 1;
         } else {
             if let Some(tail) = self.parts.pop_front() {
                 self.world[tail.0][tail.1] = self.world[tail.0][tail.1].saturating_sub(1);

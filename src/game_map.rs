@@ -19,11 +19,17 @@ impl Cell {
     }
 }
 
+pub struct BonusFood {
+    pub pos: (usize, usize),
+    pub lifetime: usize,
+}
+
 pub struct GameMap {
     pub width: usize,
     pub height: usize,
     grid: Vec<Vec<Cell>>,
     pub walls: Vec<(usize, usize)>,
+    pub bonus_food: Option<BonusFood>,
 }
 
 impl GameMap {
@@ -33,6 +39,7 @@ impl GameMap {
             height,
             grid: vec![vec![Cell::empty(); width]; height],
             walls: Vec::new(),
+            bonus_food: None,
         }
     }
 
@@ -65,7 +72,42 @@ impl GameMap {
         }
     }
 
-    pub fn render(&mut self, snake: &Snake, settings: &Settings) -> String {
+    pub fn maybe_spawn_bonus<R: Rng>(&mut self, snake: &Snake, rng: &mut R) {
+        if self.bonus_food.is_some() { return; }
+        if rng.gen_range(0..20) != 0 { return; }
+        for _ in 0..50 {
+            let r = rng.gen_range(0..self.height);
+            let c = rng.gen_range(0..self.width);
+            if !snake.parts.contains(&(r, c))
+                && !self.walls.contains(&(r, c))
+                && (r, c) != snake.food
+            {
+                self.bonus_food = Some(BonusFood { pos: (r, c), lifetime: BONUS_FOOD_LIFETIME });
+                return;
+            }
+        }
+    }
+
+    pub fn tick_bonus(&mut self) {
+        if let Some(ref mut bonus) = self.bonus_food {
+            bonus.lifetime = bonus.lifetime.saturating_sub(1);
+            if bonus.lifetime == 0 { self.bonus_food = None; }
+        }
+    }
+
+    pub fn check_bonus_eaten(&mut self, snake: &mut Snake) -> bool {
+        if let Some(ref bonus) = self.bonus_food {
+            if snake.head == bonus.pos {
+                snake.score += BONUS_FOOD_SCORE;
+                snake.length += 1;
+                self.bonus_food = None;
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn render(&mut self, snake: &Snake, settings: &Settings, frame_count: usize) -> String {
         for row in self.grid.iter_mut() {
             row.fill(Cell::empty());
         }
@@ -85,11 +127,17 @@ impl GameMap {
 
         self.grid[snake.food.0][snake.food.1] = Cell { ch: settings.food, color: Color::Red };
 
+        if let Some(ref bonus) = self.bonus_food {
+            let (r, c) = bonus.pos;
+            let blink_color = if (frame_count / 3) % 2 == 0 { Color::Magenta } else { Color::Yellow };
+            self.grid[r][c] = Cell { ch: BONUS_FOOD_CHAR, color: blink_color };
+        }
+
         let map_display_width = self.width * 2;
         let mut buf = String::with_capacity((self.height + 4) * (self.width * 2 + 20));
 
         if !settings.hide_score {
-            let score = format!("Score: {}", snake.length);
+            let score = format!("Score: {}", snake.score);
             let padding = if score.len() < map_display_width {
                 (map_display_width - score.len()) / 2
             } else {

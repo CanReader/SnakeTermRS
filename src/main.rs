@@ -55,7 +55,6 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
     let h = settings.map_height;
     let mut snake = Snake::new(w, h);
     let mut game_map = GameMap::new(w, h);
-    let frame_duration = Duration::from_millis(settings.speed);
 
     let mut rng: StdRng = if settings.seed != 0 {
         StdRng::seed_from_u64(settings.seed)
@@ -69,6 +68,7 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
     }
 
     let mut paused = false;
+    let mut frame_count: usize = 0;
 
     loop {
         while !snake.is_dead {
@@ -86,7 +86,7 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
             if paused {
                 stdout.execute(cursor::MoveTo(0, 0))?;
                 stdout.execute(terminal::Clear(ClearType::All))?;
-                let frame = game_map.render(&snake, settings);
+                let frame = game_map.render(&snake, settings, frame_count);
                 write!(stdout, "{frame}")?;
                 write!(stdout, "  {}\r\n",
                     "** PAUSED — press P or Space to resume **".with(Color::Yellow))?;
@@ -109,12 +109,22 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
                 game_map.place_food(&mut snake, &mut rng);
             }
 
+            game_map.maybe_spawn_bonus(&snake, &mut rng);
+            game_map.tick_bonus();
+            if game_map.check_bonus_eaten(&mut snake) {
+                bell(stdout);
+            }
+
+            frame_count += 1;
+
             stdout.execute(cursor::MoveTo(0, 0))?;
             stdout.execute(terminal::Clear(ClearType::All))?;
-            let frame = game_map.render(&snake, settings);
+            let frame = game_map.render(&snake, settings, frame_count);
             write!(stdout, "{frame}")?;
             stdout.flush()?;
 
+            let effective_speed = settings.effective_speed(snake.length);
+            let frame_duration = Duration::from_millis(effective_speed);
             let mut remaining = frame_duration;
             let poll_interval = Duration::from_millis(10);
             while remaining > Duration::ZERO {
@@ -132,7 +142,7 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
         // Game over
         stdout.execute(cursor::MoveTo(0, 0))?;
         stdout.execute(terminal::Clear(ClearType::All))?;
-        let frame = game_map.render(&snake, settings);
+        let frame = game_map.render(&snake, settings, frame_count);
         write!(stdout, "{frame}")?;
 
         if settings.auto_restart {
@@ -141,12 +151,14 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
             std::thread::sleep(Duration::from_secs(1));
             snake.reset();
             game_map.place_food(&mut snake, &mut rng);
+            game_map.bonus_food = None;
+            frame_count = 0;
             continue;
         }
 
         write!(stdout, "\r\n  {}  Score: {}\r\n",
             "GAME OVER!".with(Color::Red),
-            snake.length.to_string().with(Color::Yellow))?;
+            snake.score.to_string().with(Color::Yellow))?;
         write!(stdout, "  {}\r\n",
             "Press 'r' to restart or 'q' to quit".with(Color::DarkGrey))?;
         stdout.flush()?;
@@ -156,6 +168,8 @@ fn run_game(settings: &Settings, stdout: &mut io::Stdout) -> io::Result<()> {
                 GameOverInput::Restart => {
                     snake.reset();
                     game_map.place_food(&mut snake, &mut rng);
+                    game_map.bonus_food = None;
+                    frame_count = 0;
                     break;
                 }
                 GameOverInput::Quit => return Ok(()),

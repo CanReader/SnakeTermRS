@@ -5,6 +5,9 @@ pub const DEFAULT_MAP_HEIGHT: usize = 20;
 pub const MAP_CHAR: char = '.';
 pub const WALL_CHAR: char = '#';
 pub const INITIAL_SNAKE_LENGTH: usize = 3;
+pub const BONUS_FOOD_CHAR: char = '$';
+pub const BONUS_FOOD_SCORE: usize = 3;
+pub const BONUS_FOOD_LIFETIME: usize = 30;
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "snake-term", about = "Terminal Snake game written in Rust")]
@@ -65,6 +68,10 @@ pub struct Settings {
     #[arg(long, default_value_t = 0)]
     pub obstacles: usize,
 
+    /// Enable speed increase as snake grows
+    #[arg(long)]
+    pub progressive_speed: bool,
+
     /// Map width (0 = auto-detect from terminal)
     #[arg(long, default_value_t = 0)]
     pub map_width: usize,
@@ -105,6 +112,15 @@ impl Settings {
         }
 
         self
+    }
+
+    pub fn effective_speed(&self, snake_length: usize) -> u64 {
+        if self.progressive_speed {
+            let reduction = ((snake_length.saturating_sub(INITIAL_SNAKE_LENGTH)) as u64) * 5;
+            self.speed.saturating_sub(reduction).max(50)
+        } else {
+            self.speed
+        }
     }
 
     pub fn head_char(&self, dir: Direction) -> char {
