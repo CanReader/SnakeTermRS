@@ -41,9 +41,9 @@ impl Snake {
         self.direction = Direction::East;
         self.input_queue.clear();
         self.food_eaten = false;
-        self.score = 0;
         self.is_dead = false;
         self.length = INITIAL_SNAKE_LENGTH;
+        self.score = 0;
         self.parts.clear();
         for row in self.world.iter_mut() {
             row.fill(0);
@@ -63,7 +63,9 @@ impl Snake {
     }
 
     pub fn queue_direction(&mut self, dir: Direction) {
+        // Buffer up to 3 inputs for smooth turning
         if self.input_queue.len() < 3 {
+            // Check against the last queued direction (or current) to avoid reversals
             let last = self.input_queue.back().copied().unwrap_or(self.direction);
             if dir != last.opposite() && dir != last {
                 self.input_queue.push_back(dir);
@@ -79,27 +81,34 @@ impl Snake {
         }
     }
 
-    pub fn update_movement(&mut self, settings: &Settings, walls: &[(usize, usize)]) {
+    pub fn update_movement(&mut self, settings: &Settings, walls: &[(usize, usize)], border_min: (usize, usize), border_max: (usize, usize)) {
         let (dr, dc) = self.direction.delta();
         let new_row = self.head.0 as i32 + dr;
         let new_col = self.head.1 as i32 + dc;
 
-        let h = self.map_height;
-        let w = self.map_width;
+        let (bmin_r, bmin_c) = border_min;
+        let (bmax_r, bmax_c) = border_max;
+        let eff_h = bmax_r - bmin_r;
+        let eff_w = bmax_c - bmin_c;
 
         let (new_row, new_col) = if settings.disable_borders {
             (
-                ((new_row % h as i32 + h as i32) as usize) % h,
-                ((new_col % w as i32 + w as i32) as usize) % w,
+                (((new_row - bmin_r as i32) % eff_h as i32 + eff_h as i32) as usize % eff_h) + bmin_r,
+                (((new_col - bmin_c as i32) % eff_w as i32 + eff_w as i32) as usize % eff_w) + bmin_c,
             )
         } else {
-            if new_row < 0 || new_row >= h as i32 || new_col < 0 || new_col >= w as i32 {
+            if new_row < bmin_r as i32
+                || new_row >= bmax_r as i32
+                || new_col < bmin_c as i32
+                || new_col >= bmax_c as i32
+            {
                 self.is_dead = true;
                 return;
             }
             (new_row as usize, new_col as usize)
         };
 
+        // Check wall collision
         if walls.contains(&(new_row, new_col)) {
             self.is_dead = true;
             return;
@@ -122,5 +131,119 @@ impl Snake {
         if self.world[self.head.0][self.head.1] > 1 {
             self.is_dead = true;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn test_snake_initial_length() {
+        let snake = Snake::new(20, 20);
+        assert_eq!(snake.parts.len(), INITIAL_SNAKE_LENGTH);
+        assert_eq!(snake.length, INITIAL_SNAKE_LENGTH);
+        assert!(!snake.is_dead);
+    }
+
+    #[test]
+    fn test_snake_reset() {
+        let mut snake = Snake::new(20, 20);
+        snake.score = 10;
+        snake.length = 15;
+        snake.is_dead = true;
+        snake.reset();
+        assert_eq!(snake.length, INITIAL_SNAKE_LENGTH);
+        assert_eq!(snake.score, 0);
+        assert!(!snake.is_dead);
+    }
+
+    #[test]
+    fn test_snake_direction_queue() {
+        let mut snake = Snake::new(20, 20);
+        // Initial direction is East
+        // Can't queue West (opposite)
+        snake.queue_direction(Direction::West);
+        assert!(snake.input_queue.is_empty());
+        // Can queue North
+        snake.queue_direction(Direction::North);
+        assert_eq!(snake.input_queue.len(), 1);
+        // Can't queue same direction twice in a row
+        snake.queue_direction(Direction::North);
+        assert_eq!(snake.input_queue.len(), 1);
+    }
+
+    #[test]
+    fn test_snake_movement_basic() {
+        let settings = Settings::parse_from::<[&str; 0], &str>([]);
+        let mut settings = settings.resolve();
+        settings.map_width = 20;
+        settings.map_height = 20;
+        let mut snake = Snake::new(20, 20);
+        let head_before = snake.head;
+        snake.update_movement(&settings, &[], (0, 0), (20, 20));
+        // Heading East: column should increase by 1
+        assert_eq!(snake.head.0, head_before.0);
+        assert_eq!(snake.head.1, head_before.1 + 1);
+    }
+
+    #[test]
+    fn test_snake_wall_collision() {
+        let settings = Settings::parse_from::<[&str; 0], &str>([]);
+        let mut settings = settings.resolve();
+        settings.map_width = 20;
+        settings.map_height = 20;
+        let mut snake = Snake::new(20, 20);
+        // Place wall right in front of the snake
+        let wall = (snake.head.0, snake.head.1 + 1);
+        snake.update_movement(&settings, &[wall], (0, 0), (20, 20));
+        assert!(snake.is_dead);
+    }
+
+    #[test]
+    fn test_snake_border_death() {
+        let settings = Settings::parse_from::<[&str; 0], &str>([]);
+        let mut settings = settings.resolve();
+        settings.map_width = 20;
+        settings.map_height = 20;
+        let mut snake = Snake::new(20, 20);
+        // Move snake to right edge
+        for _ in 0..20 {
+            if snake.is_dead { break; }
+            snake.update_movement(&settings, &[], (0, 0), (20, 20));
+        }
+        assert!(snake.is_dead);
+    }
+
+    #[test]
+    fn test_snake_wrap_around() {
+        let settings = Settings::parse_from(&["test", "--disable-borders"]);
+        let mut settings = settings.resolve();
+        settings.map_width = 20;
+        settings.map_height = 20;
+        let mut snake = Snake::new(20, 20);
+        // Move snake to right edge and beyond — should wrap
+        for _ in 0..20 {
+            snake.update_movement(&settings, &[], (0, 0), (20, 20));
+            if snake.is_dead { break; }
+        }
+        assert!(!snake.is_dead);
+    }
+
+    #[test]
+    fn test_snake_food_eating() {
+        let settings = Settings::parse_from::<[&str; 0], &str>([]);
+        let mut settings = settings.resolve();
+        settings.map_width = 20;
+        settings.map_height = 20;
+        let mut snake = Snake::new(20, 20);
+        let old_length = snake.length;
+        // Place food right in front
+        snake.food = (snake.head.0, snake.head.1 + 1);
+        snake.update_movement(&settings, &[], (0, 0), (20, 20));
+        assert!(snake.food_eaten);
+        assert_eq!(snake.length, old_length + 1);
+        assert_eq!(snake.score, 1);
     }
 }

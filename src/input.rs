@@ -5,6 +5,7 @@ use crate::config::{Direction, Settings};
 
 pub enum GameInput {
     Move(Direction),
+    MoveP2(Direction),
     Pause,
     Quit,
     None,
@@ -27,21 +28,37 @@ pub fn poll_input(settings: &Settings, timeout: Duration) -> GameInput {
                 KeyCode::Char('p') | KeyCode::Char('P') | KeyCode::Char(' ') => {
                     return GameInput::Pause;
                 }
-                KeyCode::Char('w') | KeyCode::Char('W') | KeyCode::Up => {
+                KeyCode::Char('w') | KeyCode::Char('W') => {
                     let dir = if settings.invert_controls { Direction::South } else { Direction::North };
                     return GameInput::Move(dir);
                 }
-                KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Down => {
+                KeyCode::Char('s') | KeyCode::Char('S') => {
                     let dir = if settings.invert_controls { Direction::North } else { Direction::South };
                     return GameInput::Move(dir);
                 }
-                KeyCode::Char('a') | KeyCode::Char('A') | KeyCode::Left => {
+                KeyCode::Char('a') | KeyCode::Char('A') => {
                     let dir = if settings.invert_controls { Direction::East } else { Direction::West };
                     return GameInput::Move(dir);
                 }
-                KeyCode::Char('d') | KeyCode::Char('D') | KeyCode::Right => {
+                KeyCode::Char('d') | KeyCode::Char('D') => {
                     let dir = if settings.invert_controls { Direction::West } else { Direction::East };
                     return GameInput::Move(dir);
+                }
+                KeyCode::Up => {
+                    let dir = if settings.invert_controls { Direction::South } else { Direction::North };
+                    return if settings.multiplayer { GameInput::MoveP2(dir) } else { GameInput::Move(dir) };
+                }
+                KeyCode::Down => {
+                    let dir = if settings.invert_controls { Direction::North } else { Direction::South };
+                    return if settings.multiplayer { GameInput::MoveP2(dir) } else { GameInput::Move(dir) };
+                }
+                KeyCode::Left => {
+                    let dir = if settings.invert_controls { Direction::East } else { Direction::West };
+                    return if settings.multiplayer { GameInput::MoveP2(dir) } else { GameInput::Move(dir) };
+                }
+                KeyCode::Right => {
+                    let dir = if settings.invert_controls { Direction::West } else { Direction::East };
+                    return if settings.multiplayer { GameInput::MoveP2(dir) } else { GameInput::Move(dir) };
                 }
                 KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
                     return GameInput::Quit;
